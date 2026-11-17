@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OMR Pro — Corretor Óptico de Provas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#10b981',
+                            600: '#059669',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f1f5f9;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+        /* Print Media Styles - Critical for accurate OMR sheet printing */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 10mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            #print-area {
+                display: grid !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+            }
+            .omr-card-print {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                border: 1px dashed #94a3b8 !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            /* Force solid black ink on fiducials and OMR border */
+            .omr-box-border {
+                border-color: #000000 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .omr-fiducial {
+                background-color: #000000 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
+
+    <!-- Top Navigation & Header -->
+    <header class="no-print sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+        <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base sm:text-lg tracking-tight text-white flex items-center gap-2">
+                        OMR Pro
+                        <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">A–E</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">Leitura Óptica de Provas em Tempo Real</p>
+                </div>
+            </div>
+
+            <!-- Main Tabs Navigation -->
+            <nav class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto justify-between sm:justify-start">
+                <button onclick="switchTab('gabarito')" id="tab-btn-gabarito" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                    <span>1. Gabarito</span>
+                </button>
+                <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span>2. Scanner Ao Vivo</span>
+                </button>
+                <button onclick="switchTab('imprimir')" id="tab-btn-imprimir" class="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    <span>3. Cartão</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6">
+
+        <!-- ==========================================
+             ABA 1: CONFIGURAR GABARITO
+             ========================================== -->
+        <section id="tab-gabarito" class="no-print space-y-6">
+            <!-- Parameters Bar -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+                    <!-- Custom Question Count Input -->
+                    <div class="lg:col-span-3">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                            Quantidade de Questões
+                        </label>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="stepQuestionCount(-1)" class="w-10 h-10 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center transition" title="Diminuir 1">−</button>
+                            <div class="relative flex-1">
+                                <input type="number" id="input-num-questions" value="10" min="1" max="100" oninput="handleQuestionInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-base font-mono font-bold text-white text-center focus:outline-none focus:border-emerald-500">
+                            </div>
+                            <button type="button" onclick="stepQuestionCount(1)" class="w-10 h-10 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center transition" title="Aumentar 1">+</button>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1 mt-2">
+                            <span class="text-[10px] text-slate-500">Rápido:</span>
+                            <button type="button" onclick="updateQuestionCount(10)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">10</button>
+                            <button type="button" onclick="updateQuestionCount(15)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">15</button>
+                            <button type="button" onclick="updateQuestionCount(20)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">20</button>
+                            <button type="button" onclick="updateQuestionCount(30)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">30</button>
+                            <button type="button" onclick="updateQuestionCount(45)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">45</button>
+                            <button type="button" onclick="updateQuestionCount(60)" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">60</button>
+                        </div>
+                    </div>
+
+                    <!-- Manual Column Control -->
+                    <div class="lg:col-span-3">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                            Número de Colunas
+                        </label>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="stepColumnCount(-1)" class="w-10 h-10 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center transition" title="Menos colunas">−</button>
+                            <select id="select-num-cols" onchange="updateColumnMode(this.value)" class="flex-1 h-10 bg-slate-950 border border-slate-700 rounded-xl px-2.5 text-xs sm:text-sm font-mono font-bold text-white text-center focus:outline-none focus:border-emerald-500">
+                                <option value="auto">Automático</option>
+                                <option value="1">1 Coluna</option>
+                                <option value="2">2 Colunas</option>
+                                <option value="3">3 Colunas</option>
+                                <option value="4">4 Colunas</option>
+                                <option value="5">5 Colunas</option>
+                            </select>
+                            <button type="button" onclick="stepColumnCount(1)" class="w-10 h-10 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center transition" title="Mais colunas">+</button>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between text-[11px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 rounded-lg px-2.5 py-0.5">
+                            <span id="layout-cols-badge">1 col • 10/col</span>
+                        </div>
+                    </div>
+
+                    <!-- Max Score Input -->
+                    <div class="lg:col-span-3">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                            Nota Máxima da Prova
+                        </label>
+                        <div class="relative">
+                            <input type="number" id="input-max-score" value="10.0" min="1" max="1000" step="0.5" oninput="updateMaxScore(this.value)" class="w-full h-10 bg-slate-950 border border-slate-700 rounded-xl px-3.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-500">
+                            <span id="points-per-question-badge" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/50">
+                                1.00 pt/q
+                            </span>
+                        </div>
+                        <div class="mt-2 text-[10px] text-slate-500 truncate">
+                            Peso calculado automaticamente
+                        </div>
+                    </div>
+
+                    <!-- Quick Fill Utility Actions -->
+                    <div class="lg:col-span-3 flex flex-col gap-1.5">
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
+                            Preenchimento Rápido
+                        </label>
+                        <div class="flex gap-1.5">
+                            <button onclick="fillAllOption(0)" class="flex-1 h-10 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-2 rounded-xl text-xs transition border border-slate-700" title="Marcar todas como A">
+                                Tudo A
+                            </button>
+                            <button onclick="randomizeAnswerKey()" class="flex-1 h-10 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-2 rounded-xl text-xs transition flex items-center justify-center gap-1 border border-slate-700">
+                                <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                Aleatório
+                            </button>
+                            <button onclick="clearAnswerKey()" class="h-10 bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 font-medium px-2.5 rounded-xl text-xs transition">
+                                Limpar
+                            </button>
+                        </div>
+                        <div class="mt-1 text-[10px] text-slate-500 truncate">
+                            Ações para testar o gabarito
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Answer Key Grid -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-lg">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-800">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-white">Gabarito Oficial do Professor</h2>
+                        <p class="text-xs text-slate-400">
+                            Distribuído em <strong id="label-dynamic-cols" class="text-emerald-400">1 coluna</strong> para <strong id="label-dynamic-qcount" class="text-emerald-400">10</strong> questões (mesma disposição do cartão impresso).
+                        </p>
+                    </div>
+                    <div id="gabarito-status-pill" class="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        10/10 definidas
+                    </div>
+                </div>
+
+                <!-- Grid Container -->
+                <div id="answer-key-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Populated via JS organized by columns -->
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <p class="text-xs text-slate-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Salvo automaticamente no seu navegador.
+                    </p>
+                    <div class="flex gap-3 w-full sm:w-auto">
+                        <button onclick="switchTab('imprimir')" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold border border-slate-700 transition">
+                            Ver Cartão para Impressão
+                        </button>
+                        <button onclick="switchTab('scanner')" class="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+                            <span>Ir para o Scanner</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             ABA 2: CORRIGIR (SCANNER AO VIVO)
+             ========================================== -->
+        <section id="tab-scanner" class="no-print hidden space-y-4">
+            
+            <!-- Top Instant Grade HUD Bar -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+                    <!-- Source & Freeze Controls -->
+                <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                    <!-- Hidden File Input for Native Mobile Camera / Photo Gallery -->
+                    <input type="file" id="native-photo-input" accept="image/*" capture="environment" class="hidden" onchange="handleNativePhotoUpload(event)">
+
+                    <button onclick="triggerNativeCameraPhoto()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-1.5" title="Abre a câmera nativa do celular (Funciona sem HTTPS)">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span>Tirar Foto / Imagem</span>
+                    </button>
+
+                    <button onclick="toggleSimulationMode()" id="btn-sim-mode" class="flex-1 sm:flex-initial px-3 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-indigo-950/60 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/60">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        <span id="sim-mode-label">Simulador: ON</span>
+                    </button>
+
+                    <button onclick="toggleFreezeScanner()" id="btn-freeze" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/10">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="freeze-label">Travar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Scanner Workspace (Viewport + Detail Panel) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                
+                <!-- Left/Center: Camera / Photo / Simulator Canvas Viewport -->
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 flex flex-col items-center relative overflow-hidden">
+                    
+                    <!-- Camera Status Banner -->
+                    <div class="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 mb-2 px-1">
+                        <span id="scanner-status-text" class="flex items-center gap-1.5 font-medium">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            Alinhe a caixa preta do cartão na guia verde
+                        </span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="triggerNativeCameraPhoto()" class="text-emerald-400 hover:underline font-semibold">
+                                Abrir Foto do Celular
+                            </button>
+                            <span class="text-slate-700">|</span>
+                            <button onclick="startRealCamera()" id="btn-retry-cam" class="text-sky-400 hover:underline font-semibold">
+                                Vídeo Ao Vivo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Hidden raw video element for camera stream -->
+                    <video id="camera-video" playsinline autoplay muted class="hidden"></video>
+
+                    <!-- Interactive OMR Viewport Canvas -->
+                    <div class="relative w-full max-w-[440px] aspect-[3/4] bg-slate-950 rounded-xl overflow-hidden border-2 border-slate-800 shadow-inner flex items-center justify-center">
+                        <canvas id="scanner-canvas" width="450" height="600" class="w-full h-full object-contain cursor-pointer touch-none"></canvas>
+
+                        <!-- Frozen Badge Overlay -->
+                        <div id="frozen-badge" class="hidden absolute top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-extrabold text-xs uppercase px-3 py-1 rounded-full shadow-lg tracking-wider">
+                            Leitura Congelada
+                        </div>
+                    </div>
+
+                    <!-- Photo Alignment Controls Bar (Visible when a static photo is loaded) -->
+                    <div id="photo-controls-bar" class="hidden w-full mt-3 bg-emerald-950/40 border border-emerald-700/50 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span class="text-emerald-200">
+                            <strong>Ajuste da Foto:</strong> Arraste a imagem na tela para alinhar a caixa preta na mira verde.
+                        </span>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="adjustPhotoZoom(-0.1)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold border border-slate-700">Zoom −</button>
+                            <button onclick="resetPhotoTransform()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">Centralizar</button>
+                            <button onclick="adjustPhotoZoom(0.1)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold border border-slate-700">Zoom +</button>
+                        </div>
+                    </div>
+
+                    <!-- Simulator Helper Tip (Visible when Simulator Mode is active) -->
+                    <div id="simulator-controls-bar" class="w-full mt-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span class="text-indigo-200">
+                            <strong>Dica Simulador:</strong> Clique em qualquer bolinha na folha acima para marcar/desmarcar como um aluno!
+                        </span>
+                        <div class="flex gap-1.5">
+                            <button onclick="simulateStudentPreset('good')" class="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 font-medium">
+                                Aluno Nota Alta
+                            </button>
+                            <button onclick="simulateStudentPreset('mixed')" class="px-2.5 py-1 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 font-medium">
+                                Com Rasura/Branco
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sensitivity & Threshold Controls -->
+                    <div class="w-full mt-3 pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div class="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80">
+                            <div class="flex justify-between mb-1">
+                                <label class="text-slate-300 font-semibold">Sensibilidade da Tinta (Limiar)</label>
+                                <span id="val-sensitivity" class="font-mono text-emerald-400">28%</span>
+                            </div>
+                            <input type="range" id="slider-sensitivity" min="12" max="55" value="28" oninput="updateSensitivity(this.value)" class="w-full accent-emerald-500 cursor-pointer">
+                        </div>
+
+                        <div class="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <span class="block text-slate-300 font-semibold">Filtro Binarizado (Raio-X)</span>
+                                <span class="text-[11px] text-slate-400">Ver pixels pretos detectados</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="toggle-xray" onchange="toggleXRayView(this.checked)" class="sr-only peer">
+                                <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Question-by-Question Live Breakdown -->
+                <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col h-full max-h-[680px]">
+                    <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+                        <div>
+                            <h3 class="text-sm font-bold text-white">Detalhamento por Questão</h3>
+                            <p class="text-xs text-slate-400">Comparação instantânea Aluno vs. Gabarito</p>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px]">
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Certo</span>
+                            <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">Erro</span>
+                            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Nulo</span>
+                        </div>
+                    </div>
+
+                    <div id="live-breakdown-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                        <!-- Populated dynamically in real-time -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================
+             ABA 3: CARTÃO-RESPOSTA (IMPRIMIR)
+             ========================================== -->
+        <section id="tab-imprimir" class="hidden space-y-6">
+            
+            <!-- Print Configuration Toolbar (Hidden when printing) -->
+            <div class="no-print bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <h2 class="text-base sm:text-lg font-bold text-white">Gerador de Folha OMR Padronizada</h2>
+                    <p class="text-xs text-slate-400">
+                        Este cartão possui a caixa óptica e as colunas calibradas exatamente para a grade geométrica do scanner.
+                    </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
+                        <label class="text-xs text-slate-400 font-medium">Colunas no Cartão:</label>
+                        <select id="select-print-cols" onchange="updateColumnMode(this.value)" class="bg-transparent text-xs sm:text-sm font-bold text-emerald-400 focus:outline-none">
+                            <option value="auto" class="bg-slate-900 text-white">Auto</option>
+                            <option value="1" class="bg-slate-900 text-white">1 Coluna</option>
+                            <option value="2" class="bg-slate-900 text-white">2 Colunas</option>
+                            <option value="3" class="bg-slate-900 text-white">3 Colunas</option>
+                            <option value="4" class="bg-slate-900 text-white">4 Colunas</option>
+                            <option value="5" class="bg-slate-900 text-white">5 Colunas</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
+                        <label class="text-xs text-slate-400 font-medium">Cartões por A4:</label>
+                        <select id="select-cards-per-page" onchange="renderPrintableCards()" class="bg-transparent text-xs sm:text-sm font-bold text-white focus:outline-none">
+                            <option value="1" class="bg-slate-900">1 por folha (Grande)</option>
+                            <option value="2" selected class="bg-slate-900">2 por folha (Lado a Lado)</option>
+                            <option value="4" class="bg-slate-900">4 por folha (Compacto)</option>
+                        </select>
+                    </div>
+
+                    <input type="text" id="input-exam-title" value="Avaliação Bimestral" oninput="renderPrintableCards()" placeholder="Título da Prova" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500">
+
+                    <button onclick="window.print()" class="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        <span>Imprimir / Salvar PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Printable A4 Preview Container -->
+            <div class="bg-white text-slate-900 rounded-2xl p-4 sm:p-8 shadow-2xl mx-auto max-w-4xl">
+                <div id="print-area" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="no-print border-t border-slate-800/80 py-4 px-4 text-center text-xs text-slate-500">
+        OMR Pro • Processamento 100% local via HTML5 Canvas • Nenhuma imagem sai do seu celular
+    </footer>
+
+    <!-- ==========================================
+         APPLICATION LOGIC & COMPUTER VISION (OMR)
+         ========================================== -->
+    <script>
+        const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+        const MAX_QUESTIONS_LIMIT = 100;
+
+        // Application State
+        const state = {
+            activeTab: 'gabarito',
+            numQuestions: 10,
+            columnMode: 'auto', // 'auto' or integer 1..5
+            maxScore: 10.0,
+            // Dynamically expandable array of official answers (0..4)
+            answerKey: [],
+            // Student simulated marks: array of arrays (each row can have 0, 1, or multiple bubbles filled)
+            simulatedStudent: [],
+            useSimulator: true,
+            isFrozen: false,
+            showXRay: false,
+            inkThreshold: 0.28, // 28% dark pixel fill threshold
+            cameraStream: null,
+            // Static captured photo support (solves HTTPS/WebView mobile camera block)
+            loadedPhoto: null,
+            photoTransform: { x: 0, y: 0, scale: 1, isDragging: false, startX: 0, startY: 0 }
+        };
+
+        // Ensure answerKey and simulatedStudent arrays always have enough slots for any question count
+        function ensureArrayCapacity(count) {
+            while (state.answerKey.length < count) {
+                const idx = state.answerKey.length;
+                state.answerKey.push((idx * 2 + 1) % 5);
+            }
+            while (state.simulatedStudent.length < count) {
+                const q = state.simulatedStudent.length;
+                const correct = state.answerKey[q] >= 0 ? state.answerKey[q] : 0;
+                if (q === 3) {
+                    state.simulatedStudent.push([(correct + 1) % 5]); // Simulated wrong answer
+                } else if (q === 7) {
+                    state.simulatedStudent.push([1, 2]); // Simulated double mark
+                } else {
+                    state.simulatedStudent.push([correct]);
+                }
+            }
+        }
+
+        // Compute multi-column layout geometry for any arbitrary number of questions (1 to 100)
+        // Respects manual user column selection or automatic calculation
+        function getGridGeometry(numQ) {
+            let numCols = 1;
+            if (state.columnMode !== 'auto') {
+                const manualCols = parseInt(state.columnMode, 10);
+                if (!isNaN(manualCols) && manualCols >= 1 && manualCols <= 5) {
+                    numCols = Math.min(manualCols, numQ); // Never more columns than questions
+                }
+            } else {
+                if (numQ > 60) numCols = 4;
+                else if (numQ > 30) numCols = 3;
+                else if (numQ > 15) numCols = 2;
+            }
+
+            const rowsPerCol = Math.ceil(numQ / numCols);
+            return { numCols, rowsPerCol };
+        }
+
+        // Initialize simulated student with a realistic test sheet
+        function initSimulatedStudent() {
+            state.simulatedStudent = [];
+            ensureArrayCapacity(Math.max(state.numQuestions, 20));
+        }
+
+        // Load saved state from localStorage if available
+        function loadSavedState() {
+            try {
+                const saved = localStorage.getItem('omr_pro_state_v3');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.numQuestions && parsed.numQuestions >= 1) {
+                        state.numQuestions = Math.min(MAX_QUESTIONS_LIMIT, parseInt(parsed.numQuestions, 10));
+                    }
+                    if (parsed.columnMode) {
+                        state.columnMode = String(parsed.columnMode);
+                    }
+                    if (parsed.maxScore) state.maxScore = parseFloat(parsed.maxScore);
+                    if (Array.isArray(parsed.answerKey)) {
+                        state.answerKey = parsed.answerKey;
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not load saved state:', err);
+            }
+            ensureArrayCapacity(state.numQuestions);
+            document.getElementById('input-num-questions').value = state.numQuestions;
+            document.getElementById('input-max-score').value = state.maxScore.toFixed(1);
+            syncColumnSelects();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem('omr_pro_state_v3', JSON.stringify({
+                    numQuestions: state.numQuestions,
+                    columnMode: state.columnMode,
+                    maxScore: state.maxScore,
+                    answerKey: state.answerKey
+                }));
+            } catch (e) {}
+        }
+
+        function syncColumnSelects() {
+            const sel1 = document.getElementById('select-num-cols');
+            const sel2 = document.getElementById('select-print-cols');
+            if (sel1) sel1.value = String(state.columnMode);
+            if (sel2) sel2.value = String(state.columnMode);
+        }
+
+        // ==========================================
+        // TAB NAVIGATION
+        // ==========================================
+        function switchTab(tabName) {
+            state.activeTab = tabName;
+            const tabs = ['gabarito', 'scanner', 'imprimir'];
+            tabs.forEach(t => {
+                const section = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tabName) {
+                    section.classList.remove('hidden');
+                    btn.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all bg-emerald-600 text-white shadow';
+                } else {
+                    section.classList.add('hidden');
+                    btn.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-white';
+                }
+            });
+
+            if (tabName === 'gabarito') {
+                renderAnswerKeyGrid();
+            } else if (tabName === 'imprimir') {
+                renderPrintableCards();
+            } else if (tabName === 'scanner') {
+                // Attempt camera if not in simulator mode
+                if (!state.useSimulator && !state.cameraStream) {
+                    startRealCamera();
+                }
+            }
+        }
+
+        // ==========================================
+        // ABA 1: GABARITO CONFIGURATION & COLUMNS
+        // ==========================================
+        function handleQuestionInput(rawVal) {
+            const parsed = parseInt(rawVal, 10);
+            if (isNaN(parsed) || parsed < 1) return;
+            const clamped = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, parsed));
+            applyQuestionCount(clamped, false);
+        }
+
+        function stepQuestionCount(delta) {
+            const nextVal = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, state.numQuestions + delta));
+            applyQuestionCount(nextVal, true);
+        }
+
+        function updateQuestionCount(val) {
+            const clamped = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, parseInt(val, 10) || 10));
+            applyQuestionCount(clamped, true);
+        }
+
+        function applyQuestionCount(count, syncInput) {
+            state.numQuestions = count;
+            if (syncInput) {
+                document.getElementById('input-num-questions').value = count;
+            }
+            ensureArrayCapacity(count);
+            saveState();
+            updatePointsBadge();
+            renderAnswerKeyGrid();
+            renderPrintableCards();
+        }
+
+        function updateColumnMode(val) {
+            state.columnMode = String(val);
+            syncColumnSelects();
+            saveState();
+            updatePointsBadge();
+            renderAnswerKeyGrid();
+            renderPrintableCards();
+        }
+
+        function stepColumnCount(delta) {
+            const currentGeom = getGridGeometry(state.numQuestions);
+            let nextCols = currentGeom.numCols + delta;
+            nextCols = Math.max(1, Math.min(5, nextCols));
+            updateColumnMode(String(nextCols));
+        }
+
+        function updateMaxScore(val) {
+            const num = parseFloat(val);
+            if (!isNaN(num) && num > 0) {
+                state.maxScore = num;
+                saveState();
+                updatePointsBadge();
+            }
+        }
+
+        function updatePointsBadge() {
+            const pts = state.maxScore / state.numQuestions;
+            document.getElementById('points-per-question-badge').textContent = `${pts.toFixed(2)} pt/q`;
+            document.getElementById('label-dynamic-qcount').textContent = state.numQuestions;
+            const { numCols, rowsPerCol } = getGridGeometry(state.numQuestions);
+            const modeTag = state.columnMode === 'auto' ? 'Auto: ' : 'Manual: ';
+            document.getElementById('layout-cols-badge').textContent = `${modeTag}${numCols} col (${rowsPerCol} q/col)`;
+            const colLabelEl = document.getElementById('label-dynamic-cols');
+            if (colLabelEl) {
+                colLabelEl.textContent = numCols === 1 ? '1 coluna' : `${numCols} colunas (${rowsPerCol} por coluna)`;
+            }
+        }
+
+        function setAnswerForQuestion(qIndex, optionIndex) {
+            state.answerKey[qIndex] = optionIndex;
+            // Also keep simulated student synced if in simulator mode
+            if (state.simulatedStudent[qIndex] && state.simulatedStudent[qIndex].length === 1 && qIndex !== 3) {
+                state.simulatedStudent[qIndex] = [optionIndex];
+            }
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function fillAllOption(optIndex) {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = optIndex;
+            }
+            initSimulatedStudent();
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function randomizeAnswerKey() {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = Math.floor(Math.random() * 5);
+            }
+            initSimulatedStudent();
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function clearAnswerKey() {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = -1;
+            }
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function renderAnswerKeyGrid() {
+            updatePointsBadge();
+            const container = document.getElementById('answer-key-grid');
+            container.innerHTML = '';
+
+            const { numCols, rowsPerCol } = getGridGeometry(state.numQuestions);
+            // Match the visual grid columns in Tab 1 to the chosen number of columns
+            const responsiveColsClass =
+                numCols === 1 ? 'grid-cols-1 max-w-md mx-auto' :
+                numCols === 2 ? 'grid-cols-1 md:grid-cols-2' :
+                numCols === 3 ? 'grid-cols-1 md:grid-cols-3' :
+                numCols === 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+                'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5';
+
+            container.className = `grid ${responsiveColsClass} gap-4`;
+
+            let definedCount = 0;
+
+            for (let col = 0; col < numCols; col++) {
+                const colWrapper = document.createElement('div');
+                colWrapper.className = 'bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3 space-y-2';
+
+                const startQ = col * rowsPerCol + 1;
+                const endQ = Math.min((col + 1) * rowsPerCol, state.numQuestions);
+
+                const colHeader = document.createElement('div');
+                colHeader.className = 'text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400 pb-1.5 mb-1 border-b border-slate-800 flex items-center justify-between';
+                colHeader.innerHTML = `
+                    <span>Coluna ${col + 1}</span>
+                    <span class="text-emerald-400">${startQ <= endQ ? `Q${String(startQ).padStart(2, '0')}–Q${String(endQ).padStart(2, '0')}` : 'Vazia'}</span>
+                `;
+                colWrapper.appendChild(colHeader);
+
+                for (let r = 0; r < rowsPerCol; r++) {
+                    const q = col * rowsPerCol + r;
+                    if (q >= state.numQuestions) break;
+
+                    const selectedOpt = state.answerKey[q];
+                    if (selectedOpt >= 0 && selectedOpt < 5) definedCount++;
+
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between bg-slate-950 border border-slate-800/90 rounded-xl px-2.5 py-1.5 hover:border-slate-700 transition';
+
+                    const label = document.createElement('div');
+                    label.className = 'flex items-center gap-1.5';
+                    label.innerHTML = `
+                        <span class="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-mono text-[11px] font-bold text-slate-300">
+                            ${String(q + 1).padStart(2, '0')}
+                        </span>
+                    `;
+
+                    const bubblesDiv = document.createElement('div');
+                    bubblesDiv.className = 'flex items-center gap-1';
+
+                    LETTERS.forEach((letter, idx) => {
+                        const isSelected = selectedOpt === idx;
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.onclick = () => setAnswerForQuestion(q, idx);
+                        btn.className = isSelected
+                            ? 'w-7 h-7 rounded-full font-mono text-xs font-extrabold bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 scale-105 transition-all'
+                            : 'w-7 h-7 rounded-full font-mono text-xs font-semibold bg-slate-900 text-slate-400 border border-slate-700 hover:border-slate-500 hover:text-white transition-all';
+                        btn.textContent = letter;
+                        bubblesDiv.appendChild(btn);
+                    });
+
+                    row.appendChild(label);
+                    row.appendChild(bubblesDiv);
+                    colWrapper.appendChild(row);
+                }
+
+                container.appendChild(colWrapper);
+            }
+
+            const statusPill = document.getElementById('gabarito-status-pill');
+            statusPill.textContent = `${definedCount}/${state.numQuestions} definidas`;
+            if (definedCount === state.numQuestions) {
+                statusPill.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            } else {
+                statusPill.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20';
+            }
+        }
+
+        // ==========================================
+        // ABA 2: OMR REAL-TIME SCANNER, PHOTO & SIMULATOR
+        // ==========================================
+        function handleQuestionInput(rawVal) {
+            const parsed = parseInt(rawVal, 10);
+            if (isNaN(parsed) || parsed < 1) return;
+            const clamped = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, parsed));
+            applyQuestionCount(clamped, false);
+        }
+
+        function stepQuestionCount(delta) {
+            const nextVal = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, state.numQuestions + delta));
+            applyQuestionCount(nextVal, true);
+        }
+
+        function updateQuestionCount(val) {
+            const clamped = Math.min(MAX_QUESTIONS_LIMIT, Math.max(1, parseInt(val, 10) || 10));
+            applyQuestionCount(clamped, true);
+        }
+
+        function applyQuestionCount(count, syncInput) {
+            state.numQuestions = count;
+            if (syncInput) {
+                document.getElementById('input-num-questions').value = count;
+            }
+            ensureArrayCapacity(count);
+            saveState();
+            updatePointsBadge();
+            renderAnswerKeyGrid();
+            renderPrintableCards();
+        }
+
+        function updateMaxScore(val) {
+            const num = parseFloat(val);
+            if (!isNaN(num) && num > 0) {
+                state.maxScore = num;
+                saveState();
+                updatePointsBadge();
+            }
+        }
+
+        function updatePointsBadge() {
+            const pts = state.maxScore / state.numQuestions;
+            document.getElementById('points-per-question-badge').textContent = `${pts.toFixed(2)} pt/q`;
+            document.getElementById('label-dynamic-qcount').textContent = state.numQuestions;
+            const { numCols, rowsPerCol } = getGridGeometry(state.numQuestions);
+            document.getElementById('layout-cols-badge').textContent = `${numCols} col (${rowsPerCol}/col)`;
+        }
+
+        function setAnswerForQuestion(qIndex, optionIndex) {
+            state.answerKey[qIndex] = optionIndex;
+            // Also keep simulated student synced if in simulator mode
+            if (state.simulatedStudent[qIndex] && state.simulatedStudent[qIndex].length === 1 && qIndex !== 3) {
+                state.simulatedStudent[qIndex] = [optionIndex];
+            }
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function fillAllOption(optIndex) {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = optIndex;
+            }
+            initSimulatedStudent();
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function randomizeAnswerKey() {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = Math.floor(Math.random() * 5);
+            }
+            initSimulatedStudent();
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function clearAnswerKey() {
+            ensureArrayCapacity(state.numQuestions);
+            for (let i = 0; i < state.numQuestions; i++) {
+                state.answerKey[i] = -1;
+            }
+            saveState();
+            renderAnswerKeyGrid();
+        }
+
+        function renderAnswerKeyGrid() {
+            updatePointsBadge();
+            const container = document.getElementById('answer-key-grid');
+            container.innerHTML = '';
+
+            let definedCount = 0;
+
+            for (let q = 0; q < state.numQuestions; q++) {
+                const selectedOpt = state.answerKey[q];
+                if (selectedOpt >= 0 && selectedOpt < 5) definedCount++;
+
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between bg-slate-950 border border-slate-800/90 rounded-xl px-3 py-2 hover:border-slate-700 transition';
+
+                const label = document.createElement('div');
+                label.className = 'flex items-center gap-2';
+                label.innerHTML = `
+                    <span class="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-mono text-xs font-bold text-slate-300">
+                        ${String(q + 1).padStart(2, '0')}
+                    </span>
+                `;
+
+                const bubblesDiv = document.createElement('div');
+                bubblesDiv.className = 'flex items-center gap-1';
+
+                LETTERS.forEach((letter, idx) => {
+                    const isSelected = selectedOpt === idx;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.onclick = () => setAnswerForQuestion(q, idx);
+                    btn.className = isSelected
+                        ? 'w-8 h-8 rounded-full font-mono text-xs font-extrabold bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 scale-105 transition-all'
+                        : 'w-8 h-8 rounded-full font-mono text-xs font-semibold bg-slate-900 text-slate-400 border border-slate-700 hover:border-slate-500 hover:text-white transition-all';
+                    btn.textContent = letter;
+                    bubblesDiv.appendChild(btn);
+                });
+
+                row.appendChild(label);
+                row.appendChild(bubblesDiv);
+                container.appendChild(row);
+            }
+
+            const statusPill = document.getElementById('gabarito-status-pill');
+            statusPill.textContent = `${definedCount}/${state.numQuestions} definidas`;
+            if (definedCount === state.numQuestions) {
+                statusPill.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            } else {
+                statusPill.className = 'px-3 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20';
+            }
+        }
+
+        // ==========================================
+        // ABA 2: OMR REAL-TIME SCANNER & SIMULATOR
+        // ==========================================
+        const canvas = document.getElementById('scanner-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const video = document.getElementById('camera-video');
+
+        // Offscreen buffer for clean pixel sampling before drawing AR HUD overlays
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = 450;
+        offCanvas.height = 600;
+        const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Geometry constants of the OMR Target Box inside the 450x600 viewport
+        const ROI = {
+            x: 45,
+            y: 50,
+            w: 360,
+            h: 500
+        };
+
+        // Helper that returns the exact center (cx, cy) and radius of any question+option bubble
+        // Supports dynamic multi-column layout so 1 to 100 questions fit cleanly inside the ROI box
+        function getBubbleCoordinates(qIndex, optIndex, numQuestions) {
+            const { numCols, rowsPerCol } = getGridGeometry(numQuestions);
+            const colBlock = Math.floor(qIndex / rowsPerCol);
+            const rowInCol = qIndex % rowsPerCol;
+
+            const blockWidth = ROI.w / numCols;
+            const rowHeight = ROI.h / rowsPerCol;
+
+            // Proportion of each column block reserved for the question number (e.g. "01")
+            const labelWidth = Math.max(22, blockWidth * 0.20);
+            const bubblesAreaWidth = blockWidth - labelWidth - 4;
+            const optionPitch = bubblesAreaWidth / 5;
+
+            const blockStartX = ROI.x + colBlock * blockWidth;
+            const cx = blockStartX + labelWidth + (optIndex + 0.5) * optionPitch;
+            const cy = ROI.y + (rowInCol + 0.5) * rowHeight;
+            const labelX = blockStartX + labelWidth * 0.5;
+
+            const maxRadius = Math.min(optionPitch * 0.40, rowHeight * 0.36, 11);
+            const radius = Math.max(3.2, maxRadius);
+
+            return {
+                cx,
+                cy,
+                radius,
+                labelX,
+                blockStartX,
+                blockWidth,
+                rowHeight,
+                rowInCol,
+                colBlock,
+                numCols,
+                rowsPerCol
+            };
+        }
+
+        async function startRealCamera() {
+            const statusEl = document.getElementById('scanner-status-text');
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('WebRTC bloqueado fora de HTTPS');
+                }
+                if (state.cameraStream) {
+                    state.cameraStream.getTracks().forEach(t => t.stop());
+                }
+
+                let stream;
+                try {
+                    // First attempt: ideal rear camera
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: 'environment' },
+                            width: { ideal: 720 },
+                            height: { ideal: 960 }
+                        },
+                        audio: false
+                    });
+                } catch (firstErr) {
+                    // Fallback attempt: any available camera without strict resolution constraints
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false
+                    });
+                }
+
+                state.cameraStream = stream;
+                state.loadedPhoto = null;
+                video.srcObject = stream;
+                await video.play();
+
+                state.useSimulator = false;
+                updateScannerModeUI();
+            } catch (err) {
+                // Gracefully inform user and highlight the Native Photo button which always works on mobile
+                state.useSimulator = true;
+                updateScannerModeUI();
+                statusEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> Vídeo ao vivo bloqueado pelo navegador — Use o botão <strong>"Tirar Foto / Imagem"</strong> acima!`;
+            }
+        }
+
+        // Trigger the mobile phone's native camera app or photo picker (works even on file:// or HTTP or WebView)
+        function triggerNativeCameraPhoto() {
+            const fileInput = document.getElementById('native-photo-input');
+            if (fileInput) {
+                fileInput.value = '';
+                fileInput.click();
+            }
+        }
+
+        function handleNativePhotoUpload(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    if (state.cameraStream) {
+                        state.cameraStream.getTracks().forEach(t => t.stop());
+                        state.cameraStream = null;
+                    }
+                    state.loadedPhoto = img;
+                    state.useSimulator = false;
+                    state.isFrozen = false;
+                    resetPhotoTransform();
+                    updateScannerModeUI();
+                    switchTab('scanner');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function adjustPhotoZoom(delta) {
+            if (!state.loadedPhoto) return;
+            state.photoTransform.scale = Math.max(0.4, Math.min(3.0, state.photoTransform.scale + delta));
+        }
+
+        function resetPhotoTransform() {
+            state.photoTransform = { x: 0, y: 0, scale: 1, isDragging: false, startX: 0, startY: 0 };
+        }
+
+        function toggleSimulationMode() {
+            state.useSimulator = !state.useSimulator;
+            if (!state.useSimulator) {
+                if (!state.loadedPhoto) {
+                    startRealCamera();
+                } else {
+                    updateScannerModeUI();
+                }
+            } else {
+                if (state.cameraStream) {
+                    state.cameraStream.getTracks().forEach(t => t.stop());
+                    state.cameraStream = null;
+                }
+                state.loadedPhoto = null;
+                updateScannerModeUI();
+            }
+        }
+
+        function updateScannerModeUI() {
+            const btn = document.getElementById('btn-sim-mode');
+            const label = document.getElementById('sim-mode-label');
+            const simBar = document.getElementById('simulator-controls-bar');
+            const photoBar = document.getElementById('photo-controls-bar');
+            const statusText = document.getElementById('scanner-status-text');
+
+            if (state.useSimulator) {
+                label.textContent = 'Simulador: ON';
+                btn.className = 'flex-1 sm:flex-initial px-3 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-indigo-950/80 border-indigo-500/60 text-indigo-300';
+                simBar.classList.remove('hidden');
+                photoBar.classList.add('hidden');
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span> Simulador Interativo (Toque nas bolinhas para testar)`;
+            } else if (state.loadedPhoto) {
+                label.textContent = 'Simulador: OFF';
+                btn.className = 'flex-1 sm:flex-initial px-3 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-slate-800 border-slate-700 text-slate-300';
+                simBar.classList.add('hidden');
+                photoBar.classList.remove('hidden');
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Foto Carregada: Arraste ou dê zoom para encaixar na guia verde`;
+            } else {
+                label.textContent = 'Simulador: OFF';
+                btn.className = 'flex-1 sm:flex-initial px-3 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-1.5 bg-slate-800 border-slate-700 text-slate-300';
+                simBar.classList.add('hidden');
+                photoBar.classList.add('hidden');
+                statusText.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Câmera Ao Vivo: Encaixe a caixa preta na mira`;
+            }
+        }
+
+        function toggleFreezeScanner() {
+            state.isFrozen = !state.isFrozen;
+            const badge = document.getElementById('frozen-badge');
+            const label = document.getElementById('freeze-label');
+            const btn = document.getElementById('btn-freeze');
+
+            if (state.isFrozen) {
+                badge.classList.remove('hidden');
+                label.textContent = 'Retomar Scanner';
+                btn.className = 'flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition flex items-center justify-center gap-1.5';
+            } else {
+                badge.classList.add('hidden');
+                label.textContent = 'Travar Leitura';
+                btn.className = 'flex-1 sm:flex-initial px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition flex items-center justify-center gap-1.5';
+            }
+        }
+
+        function updateSensitivity(val) {
+            state.inkThreshold = parseInt(val, 10) / 100;
+            document.getElementById('val-sensitivity').textContent = `${val}%`;
+        }
+        // Allow clicking directly on bubbles in Simulator Mode OR dragging loaded photo to align
+        canvas.addEventListener('pointerdown', (e) => {
+            if (state.isFrozen) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            if (!state.useSimulator && state.loadedPhoto) {
+                state.photoTransform.isDragging = true;
+                state.photoTransform.startX = clickX - state.photoTransform.x;
+                state.photoTransform.startY = clickY - state.photoTransform.y;
+                canvas.setPointerCapture(e.pointerId);
+                return;
+            }
+
+            if (!state.useSimulator) return;
+
+            const numQ = state.numQuestions;
+            ensureArrayCapacity(numQ);
+
+            for (let q = 0; q < numQ; q++) {
+                for (let c = 0; c < 5; c++) {
+                    const geom = getBubbleCoordinates(q, c, numQ);
+                    const dist = Math.hypot(clickX - geom.cx, clickY - geom.cy);
+                    if (dist <= geom.radius * 1.45) {
+                        const marks = state.simulatedStudent[q] || [];
+                        const idx = marks.indexOf(c);
+                        if (idx >= 0) {
+                            marks.splice(idx, 1);
+                        } else {
+                            marks.push(c);
+                        }
+                        state.simulatedStudent[q] = marks;
+                        return;
+                    }
+                }
+            }
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!state.photoTransform.isDragging || !state.loadedPhoto) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const moveX = (e.clientX - rect.left) * scaleX;
+            const moveY = (e.clientY - rect.top) * scaleY;
+
+            state.photoTransform.x = moveX - state.photoTransform.startX;
+            state.photoTransform.y = moveY - state.photoTransform.startY;
+        });
+
+        canvas.addEventListener('pointerup', () => {
+            state.photoTransform.isDragging = false;
+        });
+
+        // Draw realistic synthetic paper sheet onto offCtx when Simulator is active
+        function drawSimulatedSheetToBuffer(targetCtx) {
+            // Wooden desk background
+            targetCtx.fillStyle = '#1e293b';
+            targetCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+            // White Paper Card
+            targetCtx.fillStyle = '#f8fafc';
+            targetCtx.fillRect(22, 18, 406, 564);
+
+            // Black thick OMR Calibration Box
+            targetCtx.strokeStyle = '#0f172a';
+            targetCtx.lineWidth = 4;
+            targetCtx.strokeRect(ROI.x, ROI.y, ROI.w, ROI.h);
+
+            // Corner Fiducial Markers
+            const fidSize = 14;
+            targetCtx.fillStyle = '#0f172a';
+            targetCtx.fillRect(ROI.x - 6, ROI.y - 6, fidSize, fidSize);
+            targetCtx.fillRect(ROI.x + ROI.w - fidSize + 6, ROI.y - 6, fidSize, fidSize);
+            targetCtx.fillRect(ROI.x - 6, ROI.y + ROI.h - fidSize + 6, fidSize, fidSize);
+            targetCtx.fillRect(ROI.x + ROI.w - fidSize + 6, ROI.y + ROI.h - fidSize + 6, fidSize, fidSize);
+
+            const numQ = state.numQuestions;
+            ensureArrayCapacity(numQ);
+            const { numCols } = getGridGeometry(numQ);
+
+            // Draw vertical dividers if multi-column
+            if (numCols > 1) {
+                targetCtx.strokeStyle = '#cbd5e1';
+                targetCtx.lineWidth = 1.5;
+                for (let col = 1; col < numCols; col++) {
+                    const divX = ROI.x + (ROI.w / numCols) * col;
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(divX, ROI.y + 2);
+                    targetCtx.lineTo(divX, ROI.y + ROI.h - 2);
+                    targetCtx.stroke();
+                }
+            }
+
+            targetCtx.textAlign = 'center';
+            targetCtx.textBaseline = 'middle';
+
+            for (let q = 0; q < numQ; q++) {
+                const firstBubble = getBubbleCoordinates(q, 0, numQ);
+                const cy = firstBubble.cy;
+
+                // Alternating subtle zebra stripe inside each column block
+                if (firstBubble.rowInCol % 2 === 1) {
+                    targetCtx.fillStyle = '#f1f5f9';
+                    targetCtx.fillRect(
+                        firstBubble.blockStartX + 2,
+                        ROI.y + firstBubble.rowInCol * firstBubble.rowHeight,
+                        firstBubble.blockWidth - 4,
+                        firstBubble.rowHeight
+                    );
+                }
+
+                // Question Number Label
+                const fontSize = Math.max(8, Math.min(11, Math.floor(firstBubble.rowHeight * 0.45)));
+                targetCtx.font = `bold ${fontSize}px Inter, sans-serif`;
+                targetCtx.fillStyle = '#334155';
+                targetCtx.fillText(String(q + 1).padStart(2, '0'), firstBubble.labelX, cy);
+
+                const studentMarks = state.simulatedStudent[q] || [];
+
+                for (let c = 0; c < 5; c++) {
+                    const geom = getBubbleCoordinates(q, c, numQ);
+                    const isMarked = studentMarks.includes(c);
+
+                    // Printed light bubble outline
+                    targetCtx.beginPath();
+                    targetCtx.arc(geom.cx, geom.cy, geom.radius, 0, Math.PI * 2);
+                    targetCtx.strokeStyle = '#94a3b8';
+                    targetCtx.lineWidth = 1.1;
+                    targetCtx.stroke();
+
+                    if (isMarked) {
+                        // Simulated dark pen/pencil mark filled by student
+                        targetCtx.beginPath();
+                        targetCtx.arc(geom.cx, geom.cy, geom.radius * 0.88, 0, Math.PI * 2);
+                        targetCtx.fillStyle = '#0f172a';
+                        targetCtx.fill();
+                    } else if (geom.radius >= 5.5) {
+                        // Faint option letter inside un-marked bubble
+                        targetCtx.fillStyle = '#94a3b8';
+                        const letFontSize = Math.max(6, Math.min(9, Math.floor(geom.radius * 0.85)));
+                        targetCtx.font = `600 ${letFontSize}px JetBrains Mono, monospace`;
+                        targetCtx.fillText(LETTERS[c], geom.cx, geom.cy + 0.5);
+                    }
+                }
+            }
+        }
+
+        // Core Computer Vision OMR Loop
+        function processOMRFrame() {
+            if (state.activeTab === 'scanner' && !state.isFrozen) {
+                // 1. Acquire source frame into offscreen buffer (Live Video, Captured Native Photo, or Simulator)
+                if (!state.useSimulator && state.loadedPhoto) {
+                    offCtx.fillStyle = '#0f172a';
+                    offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+                    const img = state.loadedPhoto;
+                    const baseScale = Math.min(offCanvas.width / img.width, offCanvas.height / img.height);
+                    const finalScale = baseScale * state.photoTransform.scale;
+                    const drawW = img.width * finalScale;
+                    const drawH = img.height * finalScale;
+                    const drawX = (offCanvas.width - drawW) / 2 + state.photoTransform.x;
+                    const drawY = (offCanvas.height - drawH) / 2 + state.photoTransform.y;
+
+                    offCtx.drawImage(img, drawX, drawY, drawW, drawH);
+                } else if (!state.useSimulator && state.cameraStream && video.readyState >= 2) {
+                    const vw = video.videoWidth;
+                    const vh = video.videoHeight;
+                    const targetAspect = offCanvas.width / offCanvas.height;
+                    const videoAspect = vw / vh;
+                    let sx = 0, sy = 0, sw = vw, sh = vh;
+                    if (videoAspect > targetAspect) {
+                        sw = vh * targetAspect;
+                        sx = (vw - sw) / 2;
+                    } else {
+                        sh = vw / targetAspect;
+                        sy = (vh - sh) / 2;
+                    }
+                    offCtx.drawImage(video, sx, sy, sw, sh, 0, 0, offCanvas.width, offCanvas.height);
+                } else {
+                    drawSimulatedSheetToBuffer(offCtx);
+                }
+
+                // 2. Extract ROI pixels and apply local adaptive thresholding
+                const roiImage = offCtx.getImageData(ROI.x, ROI.y, ROI.w, ROI.h);
+                const data = roiImage.data;
+
+                let totalLuma = 0;
+                const pixelCount = ROI.w * ROI.h;
+                const grayBuffer = new Uint8Array(pixelCount);
+
+                for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+                    const g = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+                    grayBuffer[p] = g;
+                    totalLuma += g;
+                }
+                const avgLuma = totalLuma / pixelCount;
+                const darkCutoff = avgLuma * 0.72;
+
+                // Optional X-Ray Binarized View
+                if (state.showXRay) {
+                    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+                        const isInk = grayBuffer[p] < darkCutoff;
+                        data[i] = isInk ? 16 : 15;
+                        data[i + 1] = isInk ? 185 : 23;
+                        data[i + 2] = isInk ? 129 : 42;
+                    }
+                    ctx.fillStyle = '#090d16';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.putImageData(roiImage, ROI.x, ROI.y);
+                } else {
+                    ctx.drawImage(offCanvas, 0, 0);
+                }
+
+                // 3. Matrix Bubble Density Sampling across Dynamic Multi-Column Grid
+                const numQ = state.numQuestions;
+                ensureArrayCapacity(numQ);
+
+                const results = [];
+                let correctCount = 0;
+                let wrongCount = 0;
+                let invalidCount = 0;
+
+                for (let q = 0; q < numQ; q++) {
+                    const densities = [];
+
+                    for (let c = 0; c < 5; c++) {
+                        const geom = getBubbleCoordinates(q, c, numQ);
+                        const cxLocal = Math.floor(geom.cx - ROI.x);
+                        const cyLocal = Math.floor(geom.cy - ROI.y);
+                        const sampleRadius = Math.max(2, Math.floor(geom.radius * 0.78));
+
+                        let inkPixels = 0;
+                        let totalSampled = 0;
+
+                        for (let dy = -sampleRadius; dy <= sampleRadius; dy++) {
+                            for (let dx = -sampleRadius; dx <= sampleRadius; dx++) {
+                                if (dx * dx + dy * dy <= sampleRadius * sampleRadius) {
+                                    const px = cxLocal + dx;
+                                    const py = cyLocal + dy;
+                                    if (px >= 0 && px < ROI.w && py >= 0 && py < ROI.h) {
+                                        totalSampled++;
+                                        if (grayBuffer[py * ROI.w + px] < darkCutoff) {
+                                            inkPixels++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const ratio = totalSampled > 0 ? inkPixels / totalSampled : 0;
+                        densities.push(ratio);
+                    }
+
+                    // Determine marked bubbles exceeding the ink threshold
+                    const markedIndices = [];
+                    densities.forEach((d, idx) => {
+                        if (d >= state.inkThreshold) markedIndices.push(idx);
+                    });
+
+                    const officialAnswer = state.answerKey[q];
+                    let status = 'blank';
+                    let detectedOption = -1;
+
+                    if (markedIndices.length === 1) {
+                        detectedOption = markedIndices[0];
+                        if (detectedOption === officialAnswer) {
+                            status = 'correct';
+                            correctCount++;
+                        } else {
+                            status = 'wrong';
+                            wrongCount++;
+                        }
+                    } else if (markedIndices.length > 1) {
+                        status = 'double';
+                        invalidCount++;
+                    } else {
+                        status = 'blank';
+                        invalidCount++;
+                    }
+
+                    results.push({
+                        question: q + 1,
+                        status,
+                        detectedOption,
+                        markedIndices,
+                        officialAnswer
+                    });
+
+                    // 4. Draw Augmented Reality (AR) HUD Overlays directly onto Scanner Canvas
+                    if (status === 'correct') {
+                        const g = getBubbleCoordinates(q, detectedOption, numQ);
+                        drawARCircle(g.cx, g.cy, g.radius * 1.18, '#10b981', 'rgba(16, 185, 129, 0.28)');
+                    } else if (status === 'wrong') {
+                        const gWrong = getBubbleCoordinates(q, detectedOption, numQ);
+                        drawARCircle(gWrong.cx, gWrong.cy, gWrong.radius * 1.18, '#f43f5e', 'rgba(244, 63, 94, 0.32)');
+                        if (officialAnswer >= 0 && officialAnswer < 5) {
+                            const gRight = getBubbleCoordinates(q, officialAnswer, numQ);
+                            drawARDashedRing(gRight.cx, gRight.cy, gRight.radius * 1.18, '#10b981');
+                        }
+                    } else if (status === 'double') {
+                        markedIndices.forEach(idx => {
+                            const gDup = getBubbleCoordinates(q, idx, numQ);
+                            drawARCircle(gDup.cx, gDup.cy, gDup.radius * 1.18, '#f59e0b', 'rgba(245, 158, 11, 0.30)');
+                        });
+                    } else if (status === 'blank' && officialAnswer >= 0 && officialAnswer < 5) {
+                        const gRight = getBubbleCoordinates(q, officialAnswer, numQ);
+                        drawARDashedRing(gRight.cx, gRight.cy, gRight.radius * 1.15, '#eab308');
+                    }
+                }
+
+                // Draw Green Alignment Target Frame on HUD
+                drawScannerTargetFrame();
+
+                // Update Live Score & Breakdown Panel
+                updateLiveHUD(correctCount, wrongCount, invalidCount, results);
+            }
+
+            requestAnimationFrame(processOMRFrame);
+        }
+
+        function drawARCircle(x, y, r, strokeColor, fillColor) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = strokeColor;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawARDashedRing(x, y, r, strokeColor) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([3, 3]);
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = strokeColor;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawScannerTargetFrame() {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(ROI.x, ROI.y, ROI.w, ROI.h);
+
+            // Corner HUD brackets
+            const len = 22;
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            // Top-left
+            ctx.moveTo(ROI.x - 4, ROI.y + len);
+            ctx.lineTo(ROI.x - 4, ROI.y - 4);
+            ctx.lineTo(ROI.x + len, ROI.y - 4);
+            // Top-right
+            ctx.moveTo(ROI.x + ROI.w - len, ROI.y - 4);
+            ctx.lineTo(ROI.x + ROI.w + 4, ROI.y - 4);
+            ctx.lineTo(ROI.x + ROI.w + 4, ROI.y + len);
+            // Bottom-left
+            ctx.moveTo(ROI.x - 4, ROI.y + ROI.h - len);
+            ctx.lineTo(ROI.x - 4, ROI.y + ROI.h + 4);
+            ctx.lineTo(ROI.x + len, ROI.y + ROI.h + 4);
+            // Bottom-right
+            ctx.moveTo(ROI.x + ROI.w - len, ROI.y + ROI.h + 4);
+            ctx.lineTo(ROI.x + ROI.w + 4, ROI.y + ROI.h + 4);
+            ctx.lineTo(ROI.x + ROI.w + 4, ROI.y + ROI.h - len);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function updateLiveHUD(correctCount, wrongCount, invalidCount, results) {
+            const finalGrade = (correctCount / state.numQuestions) * state.maxScore;
+            document.getElementById('hud-score').textContent = finalGrade.toFixed(1);
+            document.getElementById('hud-correct').textContent = `${correctCount}/${state.numQuestions}`;
+            document.getElementById('hud-wrong').textContent = wrongCount;
+            document.getElementById('hud-invalid').textContent = invalidCount;
+
+            const listEl = document.getElementById('live-breakdown-list');
+            listEl.innerHTML = results.map(r => {
+                const officialLetter = r.officialAnswer >= 0 ? LETTERS[r.officialAnswer] : '?';
+                let badgeClass = '';
+                let studentText = '';
+
+                if (r.status === 'correct') {
+                    badgeClass = 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300';
+                    studentText = `Marcou ${LETTERS[r.detectedOption]} ✓`;
+                } else if (r.status === 'wrong') {
+                    badgeClass = 'bg-rose-500/15 border-rose-500/30 text-rose-300';
+                    studentText = `Marcou ${LETTERS[r.detectedOption]} ✗`;
+                } else if (r.status === 'double') {
+                    badgeClass = 'bg-amber-500/15 border-amber-500/30 text-amber-300';
+                    const dupLetters = r.markedIndices.map(i => LETTERS[i]).join('+');
+                    studentText = `Rasura (${dupLetters})`;
+                } else {
+                    badgeClass = 'bg-slate-800 border-slate-700 text-slate-400';
+                    studentText = 'Em Branco';
+                }
+
+                return `
+                    <div class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs ${badgeClass}">
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold">Q${String(r.question).padStart(2, '0')}</span>
+                            <span class="font-semibold">${studentText}</span>
+                        </div>
+                        <span class="font-mono text-[11px] opacity-80">Gabarito: <strong>${officialLetter}</strong></span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // ABA 3: PRINTABLE OMR ANSWER CARDS GENERATOR
+        // ==========================================
+        function renderPrintableCards() {
+            const countPerSheet = parseInt(document.getElementById('select-cards-per-page').value, 10);
+            const examTitle = document.getElementById('input-exam-title').value || 'Avaliação';
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = '';
+
+            // Adjust print grid layout depending on cards per sheet
+            if (countPerSheet === 1) {
+                printArea.className = 'grid grid-cols-1 gap-6 max-w-xl mx-auto';
+            } else {
+                printArea.className = 'grid grid-cols-1 md:grid-cols-2 gap-6';
+            }
+
+            const numQ = state.numQuestions;
+            const { numCols, rowsPerCol } = getGridGeometry(numQ);
+
+            // Size of bubbles adapts to column count
+            const bubbleSizeClass = numCols >= 3 ? 'w-3.5 h-3.5 text-[7px]' : (numCols === 2 ? 'w-4 h-4 text-[8px]' : 'w-5 h-5 text-[9px]');
+            const rowPadClass = rowsPerCol > 18 ? 'py-0.5' : 'py-1';
+
+            for (let c = 0; c < countPerSheet; c++) {
+                const card = document.createElement('div');
+                card.className = 'omr-card-print border border-slate-300 rounded-xl p-4 bg-white text-black flex flex-col justify-between';
+
+                // Build columns inside the optical box so printed geometry matches Scanner ROI 1:1
+                let columnsHTML = '';
+                for (let col = 0; col < numCols; col++) {
+                    let colRowsHTML = '';
+                    for (let r = 0; r < rowsPerCol; r++) {
+                        const qIndex = col * rowsPerCol + r;
+                        const bgStripe = r % 2 === 1 ? 'bg-slate-100' : 'bg-white';
+
+                        if (qIndex < numQ) {
+                            let bubblesHTML = '';
+                            LETTERS.forEach(letter => {
+                                bubblesHTML += `
+                                    <div class="${bubbleSizeClass} rounded-full border border-slate-500 flex items-center justify-center font-mono font-bold text-slate-500">
+                                        ${letter}
+                                    </div>
+                                `;
+                            });
+
+                            colRowsHTML += `
+                                <div class="flex items-center justify-between px-1.5 ${rowPadClass} ${bgStripe}">
+                                    <span class="font-mono text-[10px] font-extrabold text-black w-5 text-center">${String(qIndex + 1).padStart(2, '0')}</span>
+                                    <div class="flex-1 flex items-center justify-around">
+                                        ${bubblesHTML}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            // Empty spacer row to preserve exact vertical grid alignment in the last column
+                            colRowsHTML += `
+                                <div class="flex items-center justify-between px-1.5 ${rowPadClass} ${bgStripe} opacity-0 select-none">
+                                    <span class="font-mono text-[10px] w-5">--</span>
+                                    <div class="flex-1 flex items-center justify-around">
+                                        <div class="${bubbleSizeClass}"></div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    columnsHTML += `
+                        <div class="divide-y divide-slate-200">
+                            ${colRowsHTML}
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <!-- Compact Header -->
+                    <div class="mb-3 border-b border-slate-300 pb-2">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="font-extrabold text-xs uppercase tracking-wider text-black">${examTitle} (${numQ} Questões)</span>
+                            <span class="font-mono text-[10px] border border-black px-2 py-0.5 rounded font-bold">Nota: _____ / ${state.maxScore.toFixed(1)}</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-[10px] text-slate-700 mt-2">
+                            <div class="col-span-2 border-b border-slate-400 pb-0.5"><strong>Aluno(a):</strong></div>
+                            <div class="border-b border-slate-400 pb-0.5"><strong>Turma:</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- Instructions -->
+                    <p class="text-[9px] text-slate-600 mb-2 text-center">
+                        Preencha totalmente a bolinha com caneta preta ou azul escuro. Não rasure.
+                    </p>
+
+                    <!-- Calibrated OMR Optical Box with Fiducial Anchors -->
+                    <div class="relative mx-auto w-full my-1">
+                        <!-- 4 Corner Fiducial Anchors -->
+                        <div class="omr-fiducial absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-black"></div>
+                        <div class="omr-fiducial absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-black"></div>
+                        <div class="omr-fiducial absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-black"></div>
+                        <div class="omr-fiducial absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-black"></div>
+
+                        <!-- Thick Black Calibration Frame with Dynamic Columns -->
+                        <div class="omr-box-border border-[3px] border-black grid divide-x divide-slate-300" style="grid-template-columns: repeat(${numCols}, minmax(0, 1fr));">
+                            ${columnsHTML}
+                        </div>
+                    </div>
+                `;
+
+                printArea.appendChild(card);
+            }
+        }
+
+        // Initialize application on load
+        window.onload = function () {
+            loadSavedState();
+            switchTab('gabarito');
+            renderPrintableCards();
+            requestAnimationFrame(processOMRFrame);
+        };
+    </script>
+</body>
+</html>
